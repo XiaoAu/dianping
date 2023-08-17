@@ -1,0 +1,28 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: hmdp
+  datasource:
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/hm_dianping?useSSL=false&serverTimezone=UTC
+    username: root
+    password: 20020812
+  redis: #用Linux中的redis
+    host: 192.168.120.131
+    port: 6379
+    password: 20020812
+    #连接池spring默认是lettuce，想用jedis得导入依赖
+    lettuce:
+      pool:
+        max-active: 10 #最大连接
+        max-idle: 10 #最大空闲连接
+        min-idle: 1 #最小空闲连接
+        time-between-eviction-runs: 10s
+  jackson:
+    default-property-inclusion: non_null # JSON处理时忽略非空字段
+mybatis-plus:
+  type-aliases-package: com.hmdp.entity # 别名扫描包
+logging:
+  level:
+    com.hmdp: debug
