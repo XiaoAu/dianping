@@ -8,10 +8,10 @@ spring:
     url: jdbc:mysql://127.0.0.1:3306/hm_dianping?useSSL=false&serverTimezone=UTC
     username: root
     password: 20020812
-  redis: #用Linux中的redis
-    host: 192.168.120.131
+  redis: #用Linux中的redis(192.168.74.130  密码20020812)或本机的
+    host: localhost
     port: 6379
-    password: 20020812
+    password:
     #连接池spring默认是lettuce，想用jedis得导入依赖
     lettuce:
       pool:

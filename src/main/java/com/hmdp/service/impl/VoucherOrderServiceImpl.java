@@ -111,7 +111,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                         continue;
                     }
                     //3.解析消息中的订单信息
-                    MapRecord<String, Object, Object> record = list.get(0);//String是消息id，然后三个key，三个value，有点像redis的hash结构，key中又有key再是value
+                    //String是消息id，然后三个key，三个value，有点像redis的hash结构，key中又有key再是value
+                    MapRecord<String, Object, Object> record = list.get(0);
                     Map<Object, Object> values = record.getValue();
                     //转成voucherOrder对象
                     VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
@@ -142,7 +143,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                         break;
                     }
                     //3.解析消息中的订单信息
-                    MapRecord<String, Object, Object> record = list.get(0);//String是消息id，然后三个key，三个value，有点像redis的hash结构，key中又有key再是value
+                    //String是消息id，然后三个key，三个value，有点像redis的hash结构，key中又有key再是value
+                    MapRecord<String, Object, Object> record = list.get(0);
                     Map<Object, Object> values = record.getValue();
                     //转成voucherOrder对象
                     VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
@@ -168,7 +170,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //1.获取用户
         Long userId = voucherOrder.getUserId();
 
-        //2.采用自定义锁方法(其实这里可以不用加锁，因为前面在Redis中用Lua脚本确保了原子性，不会出现并发问题，这里加锁主要是以防万一，防止redis出现问题)
+        //2.采用自定义锁方法
+        // 其实这里可以不用加锁，因为前面在Redis中用Lua脚本确保了原子性，并且现在是单线程不会出现并发问题，这里加锁主要是以防万一，防止redis出现问题
         //方案一、创建锁对象(自定义锁)
 //        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate); //用用户id做key，给同一个用户加锁，不同用户不加锁
         //方案二、创建锁对象(redisson自带的分布式锁)

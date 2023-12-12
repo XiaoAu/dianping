@@ -89,7 +89,8 @@ public class CacheClient {
         //1.从redis查询商铺缓存(存的是对象，一般用hash，但这里用字符串(opsForValue)，每种数据结构演示一遍)
         String json = stringRedisTemplate.opsForValue().get(key);
         //2.判断是否存在
-        if (StrUtil.isNotBlank(json)){ //是否不为空(isNotBlank方法只有参数中双引号中有内容才会返回true，null、""和"\t\n"都会返回false)
+        if (StrUtil.isNotBlank(json)){ //是否不为空(isNotBlank方法只有参数中双引号中有内容
+                                        // 才会返回true，null、""和"\t\n"都会返回false)
             //3.存在，判断是否过期
             //3.1把json反序列化为对象
             RedisData redisData = JSONUtil.toBean(json, RedisData.class);

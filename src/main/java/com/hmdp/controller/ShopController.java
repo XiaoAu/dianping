@@ -3,6 +3,7 @@ package com.hmdp.controller;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.google.common.hash.BloomFilter;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
@@ -21,6 +22,9 @@ public class ShopController {
 
     @Resource
     public IShopService shopService;
+
+    @Resource
+    private BloomFilter<Long> bloomFilter;
 
     /**
      * 根据id查询商铺信息
@@ -41,6 +45,8 @@ public class ShopController {
     public Result saveShop(@RequestBody Shop shop) {
         // 写入数据库
         shopService.save(shop);
+        //新增的id写入布隆过滤器
+        bloomFilter.put(shop.getId());
         // 返回店铺id
         return Result.ok(shop.getId());
     }

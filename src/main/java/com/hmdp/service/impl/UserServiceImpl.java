@@ -11,12 +11,14 @@ import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IUserService;
+import com.hmdp.utils.EndTime;
 import com.hmdp.utils.RegexUtils;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
@@ -51,12 +53,42 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             return Result.fail("手机号格式错误");
         }
 
+        //判断当天发送的验证码次数是否已达上限
+        String dayCount = stringRedisTemplate.opsForValue().get(LOGIN_CODE_DAY_COUNT_KEY + phone);
+        if (dayCount == null){ //为null则是第一次发送，创建键值对(只能存字符串)
+            stringRedisTemplate.opsForValue().set(LOGIN_CODE_DAY_COUNT_KEY + phone,
+                    "0", EndTime.getMillisecondsUntilEndOfDay(), TimeUnit.MILLISECONDS);
+            dayCount = "0";
+        }
+        if (Integer.parseInt(dayCount) >= 10){
+            return Result.fail("您的手机号码发送验证码次数已上限，请明天再试！");
+        }
+
+        //做限流，同一用户五分钟内只能发三次验证码
+        Long count = stringRedisTemplate.opsForZSet().count(LOGIN_CODE_COUNT_KEY + phone,
+                System.currentTimeMillis() - 5 * 60 * 1000, System.currentTimeMillis());
+        if (count != null && count >= CODE_COUNT){
+            return Result.fail("操作次数过多，请稍后再试！");
+        }
+
         //3.符合，生成验证码
         String code = RandomUtil.randomNumbers(6);
 
         //4.保存验证码到session换成到redis，有效期2分钟
 //        session.setAttribute("code", code);
-        stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY + phone, code, LOGIN_CODE_TTL, TimeUnit.MINUTES); //key加上业务前缀以示区分
+        //使用String进行保存，用于登录验证
+        stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY + phone,
+                code, LOGIN_CODE_TTL, TimeUnit.MINUTES); //key加上业务前缀以示区分
+
+        //使用String进行保存，用于判断当日是否发送超十次
+        stringRedisTemplate.opsForValue().set(LOGIN_CODE_DAY_COUNT_KEY + phone,
+                String.valueOf(Integer.parseInt(dayCount) + 1),
+                EndTime.getMillisecondsUntilEndOfDay(), TimeUnit.MILLISECONDS);
+
+        //使用ZSet进行保存，方便排序统计，用于限流
+        stringRedisTemplate.opsForZSet().add(LOGIN_CODE_COUNT_KEY + phone, code, System.currentTimeMillis());
+        //设置过期时间
+        stringRedisTemplate.expire(LOGIN_CODE_COUNT_KEY + phone, LOGIN_CODE_LIMIT_TTL, TimeUnit.MINUTES);
 
         //5.发送验证码
         log.info("发送短信验证码成功，验证码：" + code);

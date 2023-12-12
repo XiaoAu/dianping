@@ -1,34 +1,35 @@
 package com.hmdp.service.impl;
 
-import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.google.common.hash.BloomFilter;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
+import com.hmdp.entity.YuYue;
 import com.hmdp.mapper.ShopMapper;
+import com.hmdp.mapper.YuYueMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.service.IYuYueService;
 import com.hmdp.utils.CacheClient;
-import com.hmdp.utils.RedisData;
 import com.hmdp.utils.SystemConstants;
-import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.GeoResult;
 import org.springframework.data.geo.GeoResults;
 import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.domain.geo.GeoReference;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static com.hmdp.utils.RedisConstants.*;
@@ -38,6 +39,7 @@ import static com.hmdp.utils.RedisConstants.*;
  */
 
 @Service
+@Slf4j
 public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IShopService {
 
     @Resource
@@ -45,6 +47,12 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Resource
     private CacheClient cacheClient; //自定义Redis工具类
+
+    @Resource
+    private ShopMapper shopMapper;
+
+    @Resource
+    private BloomFilter<Long> bloomFilter;
 
     //线程池
 //    private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
@@ -59,6 +67,12 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
         //解决缓存穿透(使用缓存空对象)+缓存击穿(使用互斥锁)
 //        Shop shop = queryWithMutex(id);
+
+        //先过布隆过滤器
+        boolean flag = bloomFilter.mightContain(id);
+        if (!flag){
+            return Result.fail("店铺不存在");
+        }
 
         //解决缓存穿透(使用缓存空对象)+缓存击穿(使用逻辑过期)
 //        Shop shop = queryWithLogicalExpire(id);
@@ -290,12 +304,14 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         int end = current * SystemConstants.DEFAULT_PAGE_SIZE;
         //3.查询redis，按照距离排序、分页。结果：shopId、distance
         String key = SHOP_GEO_KEY + typeId;
-        GeoResults<RedisGeoCommands.GeoLocation<String>> results = stringRedisTemplate.opsForGeo() //GEOSEARCH key BYLONLAT x y BYRADIUS 10 WITHDISTANCE
+        //GEOSEARCH key BYLONLAT x y BYRADIUS 10 WITHDISTANCE
+        GeoResults<RedisGeoCommands.GeoLocation<String>> results = stringRedisTemplate.opsForGeo()
                 .search(
                         key,
                         GeoReference.fromCoordinate(x, y), //圆心
                         new Distance(5000), //半径5000m
-                        RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs().includeDistance().limit(end) //距离+分页(这里的分页只能设定截到哪，不能设定从哪开始截)
+                        //距离+分页(这里的分页只能设定截到哪，不能设定从哪开始截)
+                        RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs().includeDistance().limit(end)
                 );
         //4.解析出id
         if (results == null){
@@ -326,5 +342,39 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         }
         //6.返回
         return Result.ok(shops);
+    }
+
+    //将店铺id存到布隆过滤器中
+    @PostConstruct
+    @Scheduled(cron = "0 */30 * * * *") //每30分钟执行一次，重构布隆过滤器
+    public void putBloomData(){
+        log.info("重构布隆过滤器...");
+        //查询所有店铺id
+        List<Long> shopIds = shopMapper.selectAllIds();
+        for (Long shopId : shopIds) {
+            bloomFilter.put(shopId);
+        }
+    }
+
+
+    @Resource
+    private IYuYueService yuYueService;
+
+    //预约活动
+    @Scheduled(cron = "0 * * * * ?") //每分钟执行一次
+    public void test(){
+        //所有活动
+        List<YuYue> actives = yuYueService.list();
+        //现在时间
+        LocalDateTime now = LocalDateTime.now();
+        for (YuYue active : actives) {
+            if (now.isAfter(active.getBeginTime().minusMinutes(10)) && now.isBefore(active.getBeginTime())){
+                //模拟发短信
+                log.info("{}，您预约的{}活动即将开始，请尽快前往参加", active.getPhone(), active.getActiveName());
+                //发完短信后应该删掉预约表中的对应数据
+                yuYueService.remove(new LambdaQueryWrapper<YuYue>().eq(YuYue::getPhone, active.getPhone())
+                        .eq(YuYue::getActiveName, active.getActiveName()));
+            }
+        }
     }
 }

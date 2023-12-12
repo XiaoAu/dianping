@@ -60,7 +60,7 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
-        //ThreadLocal中移除用户
+        //ThreadLocal中移除用户(防止ThreadLocal内存泄漏)
         UserHolder.removeUser();
     }
 }

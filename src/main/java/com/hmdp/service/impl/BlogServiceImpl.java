@@ -176,7 +176,7 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         List<Long> ids = new ArrayList<>(typedTuples.size());
         long minTime = 0;
         int os = 1; //偏移量
-        for (ZSetOperations.TypedTuple<String> tuple : typedTuples) {
+        for (ZSetOperations.TypedTuple<String> tuple : typedTuples) { //5 4 4 2 2
             //4.1获取id
             ids.add(Long.valueOf(tuple.getValue()));
             //4.2获取分数(时间戳)
